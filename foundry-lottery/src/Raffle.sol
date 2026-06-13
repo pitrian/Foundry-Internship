@@ -10,45 +10,42 @@ import {
 import {
     VRFConsumerBaseV2Plus
 } from "chainlink/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
-import {
-    AutomationCompatibleInterface
-} from "chainlink/src/v0.8/automation/interfaces/AutomationCompatibleInterface.sol";
 
 /**
- * @title Raffle
- * @notice Hợp đồng xổ số minh bạch sử dụng Chainlink VRF và Automation
+ * @title A sample Raffle Contract
+ * @dev Triển khai logic chọn người thắng sử dụng CEI (Checks-Effects-Interactions)
  */
-contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
+contract Raffle is VRFConsumerBaseV2Plus {
     /* Errors */
     error Raffle__NotEnoughEthSent();
     error Raffle__TransferFailed();
     error Raffle__RaffleNotOpen();
     error Raffle__UpkeepNotNeeded(
-        uint256 currentBalance,
-        uint256 numPlayers,
-        uint256 raffleState
+        uint256 balance,
+        uint256 playersLength,
+        uint256 state
     );
 
-    /* Type declarations */
+    /* Type Declarations */
     enum RaffleState {
         OPEN,
         CALCULATING
     }
 
     /* State Variables */
-    uint16 private constant REQUEST_CONFIRMATIONS = 3;
-    uint32 private constant NUM_WORDS = 1;
-
     uint256 private immutable i_entranceFee;
     uint256 private immutable i_interval;
+    address payable[] private s_players;
+    uint256 private s_lastTimeStamp;
+    RaffleState private s_raffleState;
+    address private s_recentWinner;
+
+    // VRF Variables
     bytes32 private immutable i_gasLane;
     uint256 private immutable i_subscriptionId;
     uint32 private immutable i_callbackGasLimit;
-
-    address payable[] private s_players;
-    uint256 private s_lastTimeStamp;
-    address private s_recentWinner;
-    RaffleState private s_raffleState;
+    uint16 private constant REQUEST_CONFIRMATIONS = 3;
+    uint32 private constant NUM_WORDS = 1;
 
     /* Events */
     event EnteredRaffle(address indexed player);
@@ -65,45 +62,25 @@ contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
     ) VRFConsumerBaseV2Plus(vrfCoordinator) {
         i_entranceFee = entranceFee;
         i_interval = interval;
+        s_lastTimeStamp = block.timestamp;
         i_gasLane = gasLane;
         i_subscriptionId = subscriptionId;
         i_callbackGasLimit = callbackGasLimit;
-        s_lastTimeStamp = block.timestamp;
         s_raffleState = RaffleState.OPEN;
     }
 
     function enterRaffle() external payable {
         if (msg.value < i_entranceFee) revert Raffle__NotEnoughEthSent();
         if (s_raffleState != RaffleState.OPEN) revert Raffle__RaffleNotOpen();
+
         s_players.push(payable(msg.sender));
         emit EnteredRaffle(msg.sender);
     }
 
-    function checkUpkeep(
-        bytes memory /* checkData */
-    )
-        public
-        view
-        override
-        returns (bool upkeepNeeded, bytes memory /* performData */)
-    {
-        bool timePassed = (block.timestamp - s_lastTimeStamp) >= i_interval;
-        bool isOpen = RaffleState.OPEN == s_raffleState;
-        bool hasBalance = address(this).balance > 0;
-        bool hasPlayers = s_players.length > 0;
-        upkeepNeeded = (timePassed && isOpen && hasBalance && hasPlayers);
-        return (upkeepNeeded, "0x0");
-    }
+    // Tạm thời dùng pickWinner cho Bài 10, Bài 11
+    function pickWinner() external {
+        if ((block.timestamp - s_lastTimeStamp) < i_interval) revert();
 
-    function performUpkeep(bytes calldata /* performData */) external override {
-        (bool upkeepNeeded, ) = checkUpkeep("");
-        if (!upkeepNeeded) {
-            revert Raffle__UpkeepNotNeeded(
-                address(this).balance,
-                s_players.length,
-                uint256(s_raffleState)
-            );
-        }
         s_raffleState = RaffleState.CALCULATING;
 
         uint256 requestId = s_vrfCoordinator.requestRandomWords(
@@ -121,39 +98,51 @@ contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         emit RequestedRaffleWinner(requestId);
     }
 
+    /**
+     * @dev Oracle trả kết quả về đây. Sử dụng mô hình CEI để bảo mật [2].
+     */
     function fulfillRandomWords(
         uint256 /* requestId */,
         uint256[] calldata randomWords
     ) internal override {
-        // uint256 indexOfWinner = randomWords % s_players.length;
+        // 1. Checks (Hiện tại chưa cần thêm check logic phức tạp ở đây)
+
+        // 2. Effects (Thay đổi trạng thái nội bộ trước [2])
+        // Dùng Modulo để lấy chỉ số người thắng [3]
         uint256 indexOfWinner = randomWords[0] % s_players.length;
         address payable winner = s_players[indexOfWinner];
         s_recentWinner = winner;
-        s_raffleState = RaffleState.OPEN;
-        s_players = new address payable[](0);
-        s_lastTimeStamp = block.timestamp;
-        emit PickedWinner(winner);
 
+        s_raffleState = RaffleState.OPEN; // Mở lại raffle
+        s_players = new address payable[](0); // Reset mảng người chơi [4]
+        s_lastTimeStamp = block.timestamp; // Cập nhật mốc thời gian [4]
+
+        emit PickedWinner(winner); // Phát sự kiện người thắng [5]
+
+        // 3. Interactions (Gửi ETH cuối cùng để tránh tấn công Reentrancy [2])
         (bool success, ) = winner.call{value: address(this).balance}("");
-        if (!success) revert Raffle__TransferFailed();
+        if (!success) {
+            revert Raffle__TransferFailed();
+        }
     }
 
-    /** Getters */
+    /* Getters */
     function getEntranceFee() external view returns (uint256) {
         return i_entranceFee;
     }
+
     function getRaffleState() external view returns (RaffleState) {
         return s_raffleState;
     }
+
     function getPlayer(uint256 index) external view returns (address) {
         return s_players[index];
     }
+
     function getRecentWinner() external view returns (address) {
         return s_recentWinner;
     }
-    function getNumberOfPlayers() external view returns (uint256) {
-        return s_players.length;
-    }
+
     function getLastTimeStamp() external view returns (uint256) {
         return s_lastTimeStamp;
     }
