@@ -106,6 +106,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
         uint256 /* requestId */,
         uint256[] calldata randomWords
     ) internal override {
+        //bai 16 mô hình CEI
         // 1. Checks (Hiện tại chưa cần thêm check logic phức tạp ở đây)
 
         // 2. Effects (Thay đổi trạng thái nội bộ trước [2])
