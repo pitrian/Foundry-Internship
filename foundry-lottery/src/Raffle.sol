@@ -37,7 +37,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
     uint256 private immutable i_interval;
     address payable[] private s_players;
     uint256 private s_lastTimeStamp;
-    RaffleState private s_raffleState;
+    RaffleState private s_raffleState; //bai12 enum
     address private s_recentWinner;
 
     // VRF Variables
@@ -66,6 +66,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
         i_gasLane = gasLane;
         i_subscriptionId = subscriptionId;
         i_callbackGasLimit = callbackGasLimit;
+        //bai12 khởi tạo trạng thái raffle là OPEN
         s_raffleState = RaffleState.OPEN;
     }
 
@@ -113,7 +114,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
         address payable winner = s_players[indexOfWinner];
         s_recentWinner = winner;
 
-        s_raffleState = RaffleState.OPEN; // Mở lại raffle
+        s_raffleState = RaffleState.OPEN; // Mở lại raffle sau khi có kết quả
         s_players = new address payable[](0); // Reset mảng người chơi [4]
         s_lastTimeStamp = block.timestamp; // Cập nhật mốc thời gian [4]
 
