@@ -10,12 +10,15 @@ import {
 import {
     VRFConsumerBaseV2Plus
 } from "chainlink/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
+import {
+    AutomationCompatibleInterface
+} from "chainlink/src/v0.8/automation/interfaces/AutomationCompatibleInterface.sol";
 
 /**
  * @title A sample Raffle Contract
  * @dev Triển khai logic chọn người thắng sử dụng CEI (Checks-Effects-Interactions)
  */
-contract Raffle is VRFConsumerBaseV2Plus {
+contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
     /* Errors */
     error Raffle__NotEnoughEthSent();
     error Raffle__TransferFailed();
@@ -23,7 +26,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
     error Raffle__UpkeepNotNeeded(
         uint256 balance,
         uint256 playersLength,
-        uint256 state
+        uint256 raffleState
     );
 
     /* Type Declarations */
@@ -78,9 +81,40 @@ contract Raffle is VRFConsumerBaseV2Plus {
         emit EnteredRaffle(msg.sender);
     }
 
-    // Tạm thời dùng pickWinner cho Bài 10, Bài 11
-    function pickWinner() external {
-        if ((block.timestamp - s_lastTimeStamp) < i_interval) revert();
+    /**
+     * @dev Bài 19: Hàm kiểm tra điều kiện để quay thưởng (được gọi off-chain bởi Chainlink Nodes) [7]
+     * upkeepNeeded trả về true khi thỏa mãn 4 điều kiện: thời gian, trạng thái, số dư và người chơi [8, 9].
+     */
+    function checkUpkeep(
+        bytes memory /* checkData */
+    )
+        public
+        view
+        override
+        returns (bool upkeepNeeded, bytes memory /* performData */)
+    {
+        bool timeHasPassed = (block.timestamp - s_lastTimeStamp) >= i_interval;
+        bool isOpen = RaffleState.OPEN == s_raffleState;
+        bool hasBalance = address(this).balance > 0;
+        bool hasPlayers = s_players.length > 0;
+
+        upkeepNeeded = (timeHasPassed && isOpen && hasBalance && hasPlayers);
+        return (upkeepNeeded, "0x0"); // Trả về "0x0" vì chúng ta không sử dụng dữ liệu performData [10]
+    }
+    /**
+     * @dev Bài 19: Hàm thực hiện quay thưởng (thay thế hàm pickWinner cũ) [11]
+     * Được gọi on-chain khi checkUpkeep trả về true [11].
+     */
+    function performUpkeep(bytes calldata /* performData */) external override {
+        // Kiểm tra lại điều kiện một lần nữa để bảo mật [12]
+        (bool upkeepNeeded, ) = checkUpkeep("");
+        if (!upkeepNeeded) {
+            revert Raffle__UpkeepNotNeeded(
+                address(this).balance,
+                s_players.length,
+                uint256(s_raffleState)
+            );
+        }
 
         s_raffleState = RaffleState.CALCULATING;
 
