@@ -39,8 +39,31 @@ contract RaffleTest is Test {
         callbackGasLimit = config.callbackGasLimit;
     }
 
+    /* Bài 27: Kiểm tra khởi tạo */
     function testRaffleInitializesInOpenState() public view {
-        // Kiểm tra xem trạng thái khởi tạo có phải là OPEN không
+        // Xác nhận trạng thái ban đầu của xổ số là OPEN (0) [1], [5]
         assert(raffle.getRaffleState() == Raffle.RaffleState.OPEN);
+    }
+
+    /* Bài 29: Kiểm tra hàm enterRaffle */
+
+    // 1. Kiểm tra revert khi người chơi không gửi đủ tiền phí
+    function testRaffleRevertsWhenYouDontPayEnough() public {
+        // Arrange (Chuẩn bị): Giả lập người chơi gọi hàm [6], [7]
+        vm.prank(PLAYER);
+        // Act / Assert (Hành động và Xác nhận): Mong đợi lỗi Raffle__NotEnoughEthSent [6], [7]
+        vm.expectRevert(Raffle.Raffle__NotEnoughEthSent.selector);
+        raffle.enterRaffle();
+    }
+
+    // 2. Kiểm tra việc ghi nhận địa chỉ người chơi khi tham gia thành công
+    function testRaffleRecordsPlayerWhenTheyEnter() public {
+        // Arrange
+        vm.prank(PLAYER);
+        // Act: Tham gia xổ số với đúng số tiền entranceFee [8], [9]
+        raffle.enterRaffle{value: entranceFee}();
+        // Assert: Lấy địa chỉ tại index 0 và so sánh với PLAYER [8], [9]
+        address playerRecorded = raffle.getPlayer(0);
+        assert(playerRecorded == PLAYER);
     }
 }

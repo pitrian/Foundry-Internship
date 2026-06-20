@@ -74,7 +74,7 @@ contract HelperConfig is Script {
                 gasLane: 0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae,
                 subscriptionId: 0,
                 callbackGasLimit: 500000,
-                // link: address(link),
+                link: address(0x779877A7B0D9E8603169DdbD7836e478b4624789),
                 deployerKey: 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 // Anvil default key
             });
     }
